@@ -3,7 +3,7 @@ import pickle
 import torch
 
 from datasets import CCUBDataset, CFlowersDataset, CustomDataset
-from models.clip_r_precision import CLIPRPrecision
+from models.clip_r_precision_custom import CLIPRPrecision
 from clip import clip
 from tqdm import tqdm
 
@@ -78,17 +78,20 @@ if __name__ == "__main__":
         )
     else:
         #raise Exception(f"Unknown dataset: {args.dataset}")
-        dataset = CustomDataset(data_dir)
+        dataset = CustomDataset(args.pred_path, image_transform=image_transform, tokenizer=tokenizer)
+        dataset.init_mismatch_texts('./text.txt')
 
     # run prediction
+    result = pickle.load(open(args.pred_path, 'rb'))
     clip_result = []
     for entry in tqdm(result):
+        #print("=======", entry)
         caption, gen_img_path = entry
-
+        #print(gen_img_path)
         image = Image.open(gen_img_path).convert("RGB")
-        if dataset.image_transform:
-            image = dataset.image_transform(image)
-        image = image.unsqueeze(0).cuda()
+        #if dataset.image_transform:
+        #image = image.unsqueeze(0).cuda()
+        """
         try:
             if args.split == "test_swapped":
                 swapped = True
@@ -96,20 +99,25 @@ if __name__ == "__main__":
                 swapped = False
             text_conditioned = caption.cuda()
         except:
+            #print("??????????????????????????????")
             continue
+        """
+        ##print("????", caption)
+        text_conditioned = tokenizer(caption).cuda()
         mismatched_captions = dataset.get_mismatched_captions().cuda()
         all_texts = torch.cat([text_conditioned, mismatched_captions], 0)
 
         with torch.no_grad():
             image_features, text_features = model(image, all_texts)
-
+            image_features = image_features.repeat(text_features.shape[0], 1)
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
             text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-
-            logit_scale = model.logit_scale.exp()
-            logits_per_image = logit_scale * image_features @ text_features.t()
-
-            clip_prediction = torch.argsort(logits_per_image, dim=1, descending=True)[0, 0].item()
+            ##print("====shape=====", image_features)
+            logits_per_image = torch.nn.CosineSimilarity(dim=1)(image_features, text_features)
+            logits_per_image = logits_per_image.reshape(-1, 1)
+            clip_prediction = torch.argsort(logits_per_image, dim=0, descending=True)[0, 0].item()
+            ##print("clip_prediction", clip_prediction)
+            ##print(logits_per_image)
 
         new_entry = (gen_img_path, clip_prediction)
         clip_result.append(new_entry)

@@ -10,6 +10,7 @@ if __name__ == '__main__':
     lst = os.listdir(images_path)
     cis = []
     for i in range(len(lst)):
+        print(lst[i])
         cis.append((caption, os.path.join(images_path, lst[i])))
     
     with open(out_path, 'wb') as f:

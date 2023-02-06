@@ -12,12 +12,12 @@ import pickle
 
 class BaseDataset(data.Dataset):
     def __init__(self, data_dir=None, dataset_name=None, comp_type=None, split=None,
-                 image_transform=None, tokenizer=None):
+                 image_transform=True, tokenizer=None):
         self.data_dir = data_dir
         self.dataset_name = dataset_name
         self.comp_type = comp_type
         self.split = split
-
+        """
         anno_data_path = os.path.join(data_dir, dataset_name, comp_type, "data.pkl")
         with open(anno_data_path, "rb") as f:
             self.anno_data = pickle.load(f)
@@ -42,7 +42,7 @@ class BaseDataset(data.Dataset):
                     self.image_id_to_valid_caption_ids[image_id].append(caption_id)
 
         self.image_id_to_class_id = self.load_class_ids()
-
+        """
         self.image_transform = image_transform
         self.tokenizer = tokenizer
 
@@ -269,7 +269,7 @@ class CustomDataset(BaseDataset):
         self.image_list = []
         self.mismatch_texts = []
         #load data include image and corresponse caption 
-        cis = pickle.load(open(data_dir))
+        cis = pickle.load(open(data_dir, 'rb'))
 
         for i in range(len(cis)):
             caption, image_path = cis[i]
@@ -286,7 +286,11 @@ class CustomDataset(BaseDataset):
         with open(data_dir, 'r') as f:
             line = f.readline()
             while line:
-                self.mismatch_texts.append(line[:-1])
+                if self.tokenizer is None:
+                    self.mismatch_texts.append(line[:-1])
+                else:
+                    self.mismatch_texts.append(self.tokenizer(line[:-1]))
+
                 line = f.readline()
 
     def __len__(self):
@@ -300,5 +304,5 @@ class CustomDataset(BaseDataset):
         return caption, image_path
 
     def get_mismatched_captions(self):
-        return self.mismatch_texts
+        return torch.cat(self.mismatch_texts, 0).long()
         

@@ -10,67 +10,24 @@ from clip import clip
 class CLIPRPrecision(nn.Module):
     def __init__(self):
         super().__init__()
-        clip_model, preprocess = clip.load('RN101', jit=False)
+        clip_model, preprocess = clip.load('ViT-B/32', jit=False)
         #clip_model, preprocess = clip.load('ViT-B/32', jit=False)
-        clip_model = clip_model.float()
+        self.clip_model = clip_model.float()
         self.preprocess = preprocess
 
         # visual
-        self.visual_frozen = nn.Sequential(
-            clip_model.visual.conv1,
-            clip_model.visual.bn1,
-            clip_model.visual.relu,
-            clip_model.visual.conv2,
-            clip_model.visual.bn2,
-            clip_model.visual.relu,
-            clip_model.visual.conv3,
-            clip_model.visual.bn3,
-            clip_model.visual.relu,
-            clip_model.visual.avgpool,
-            clip_model.visual.layer1,
-            clip_model.visual.layer2,
-            clip_model.visual.layer3,
-        ).eval().requires_grad_(False)
-
-        self.attn_pool = clip_model.visual.attnpool
-        self.layer4 = clip_model.visual.layer4
-
-        # textual
-        self.token_embedding_frozen = clip_model.token_embedding.eval().requires_grad_(False)
-        self.positional_embedding_frozen = clip_model.positional_embedding.requires_grad_(False)
-        self.transformer_frozen = nn.Sequential(
-            *clip_model.transformer.resblocks[:-1]
-        ).eval().requires_grad_(False)
-
-        self.transformer_last_block = clip_model.transformer.resblocks[-1]
-
-        self.ln_final = clip_model.ln_final
-        self.text_projection = clip_model.text_projection
-        self.logit_scale = clip_model.logit_scale
 
     def encode_image(self, image):
+        
         with torch.no_grad():
-            x = self.visual_frozen(image)
-        x = self.layer4(x)
-        x = self.attn_pool(x)
-
+            x = self.preprocess(image)
+            x = x.unsqueeze(0).cuda()
+            x = self.clip_model.encode_image(x)
         return x
 
-    def encode_text(self, text):
+    def encode_text(self, text_token):
         with torch.no_grad():
-            x = self.token_embedding_frozen(text)  # [batch_size, n_ctx, d_model]
-            x = x + self.positional_embedding_frozen
-            x = x.permute(1, 0, 2)  # NLD -> LND
-            x = self.transformer_frozen(x)
-
-        x = self.transformer_last_block(x)
-        x = x.permute(1, 0, 2)  # LND -> NLD
-        x = self.ln_final(x)
-
-        # x.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
-
+            x = self.clip_model.encode_text(text_token)
         return x
 
     def unfreeze(self):

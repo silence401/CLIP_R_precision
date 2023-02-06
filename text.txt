@@ -1,3 +1,6 @@
+'A red fish'
+'A yellow fish'
+'A fish'
 'A blue bicycle parked by a metal gate.',
 'an orange bike leaning on a pole in the snow',
 'There are some colored lights hanging from street lamps',
